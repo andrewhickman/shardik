@@ -1,7 +1,6 @@
 #![recursion_limit="256"]
 
 mod connection;
-mod repository;
 
 use std::pin::Pin;
 use std::sync::Arc;
@@ -11,7 +10,6 @@ use tonic::transport::Server;
 use tonic::{Code, Request, Response, Status, Streaming};
 
 use crate::connection::ConnectionMap;
-use crate::repository::Repository;
 use shardik::api::*;
 
 pub struct LockService {
@@ -19,7 +17,6 @@ pub struct LockService {
 }
 
 pub struct ServiceState {
-    repository: Repository,
     connections: ConnectionMap,
 }
 
@@ -46,9 +43,14 @@ impl server::LockService for LockService {
                 },
                 None => return,
             };
-            let (connection, data) = state.connections.begin(&id).await;
+            let (mut connection, data) = state.connections.begin(&id).await;
             yield LockResponse {
                 body: Some(lock_response::Body::Acquired(data)),
+            };
+
+            connection.wait().await;
+            yield LockResponse {
+                body: Some(lock_response::Body::Release(id)),
             };
 
             let data = match stream.next().await {
@@ -58,7 +60,7 @@ impl server::LockService for LockService {
                 },
                 None => Err(Status::new(Code::DataLoss, "shard not released"))?,
             };
-            connection.end(&id, data).await;
+            connection.release(data).unwrap();
 
             while let Some(req) = stream.next().await {
                 Err(Status::new(Code::FailedPrecondition, "connection closed"))?;
@@ -72,7 +74,6 @@ impl server::LockService for LockService {
 impl ServiceState {
     fn new() -> Self {
         ServiceState {
-            repository: Repository::new(),
             connections: ConnectionMap::new(),
         }
     }
