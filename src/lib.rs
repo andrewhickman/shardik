@@ -1,1 +1,1 @@
-tonic::include_proto!("shardik");
+pub mod api;

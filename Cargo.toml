@@ -5,12 +5,18 @@ authors = ["Andrew Hickman <andrew.hickman1@sky.com>"]
 edition = "2018"
 build = "build.rs"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[[bin]]
+name = "server"
+path = "src/server/main.rs"
 
 [dependencies]
 tonic = "0.1.0-alpha.1"
-prost = "0.5.0"
-bytes = "0.4.12"
+tokio = "=0.2.0-alpha.6"
+log = "0.4"
+futures-preview = "0.3.0-alpha.19"
+prost = "0.5"
+bytes = "0.4"
+env_logger = "0.7"
 
 [build-dependencies]
 tonic-build = "0.1.0-alpha.1"

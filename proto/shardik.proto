@@ -4,18 +4,18 @@ package shardik;
 
 import "google/protobuf/empty.proto";
 
-service Shardik {
-  rpc Lock(stream Request) returns (stream Response) {}
+service LockService {
+  rpc Lock(stream LockRequest) returns (stream LockResponse) {}
 }
 
-message Request {
+message LockRequest {
   oneof body {
     google.protobuf.Empty acquire = 1;
     Data released = 2;
   }
 }
 
-message Response {
+message LockResponse {
   oneof body {
     google.protobuf.Empty release = 1;
     Data acquired = 2;
