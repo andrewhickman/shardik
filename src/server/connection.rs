@@ -1,18 +1,21 @@
-use std::sync::Arc;
+use shardik::api::Data;
 
-use crate::ServiceState;
-use shardik::api::{LockRequest, LockResponse};
+pub struct ConnectionMap {}
 
-pub struct Connection {
-    service_state: Arc<ServiceState>,
+pub struct Connection;
+
+impl ConnectionMap {
+    pub fn new() -> Self {
+        ConnectionMap {}
+    }
+
+    pub async fn begin(&self, id: &str) -> (Connection, Data) {
+        unimplemented!()
+    }
 }
 
 impl Connection {
-    pub fn new(service_state: Arc<ServiceState>) -> Self {
-        Connection { service_state }
-    }
-
-    pub async fn handle(&mut self, req: LockRequest) -> LockResponse {
+    pub async fn end(self, id: &str, data: Data) {
         unimplemented!()
     }
 }

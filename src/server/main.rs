@@ -1,3 +1,5 @@
+#![recursion_limit="256"]
+
 mod connection;
 mod repository;
 
@@ -6,9 +8,9 @@ use std::sync::Arc;
 
 use futures::{Stream, StreamExt};
 use tonic::transport::Server;
-use tonic::{Request, Response, Status, Streaming};
+use tonic::{Code, Request, Response, Status, Streaming};
 
-use crate::connection::Connection;
+use crate::connection::ConnectionMap;
 use crate::repository::Repository;
 use shardik::api::*;
 
@@ -18,6 +20,7 @@ pub struct LockService {
 
 pub struct ServiceState {
     repository: Repository,
+    connections: ConnectionMap,
 }
 
 #[tonic::async_trait]
@@ -31,14 +34,34 @@ impl server::LockService for LockService {
         log::info!("Lock request: {:?}", req);
 
         let stream = req.into_inner();
-        let mut connection = Connection::new(self.state.clone());
+        let state = self.state.clone();
 
         let res = async_stream::try_stream! {
             futures::pin_mut!(stream);
 
-            while let Some(op) = stream.next().await {
-                let op = op?;
-                yield connection.handle(op).await;
+            let id = match stream.next().await {
+                Some(req) => {
+                    let req = req?;
+                    req.expect_acquire()?
+                },
+                None => return,
+            };
+            let (connection, data) = state.connections.begin(&id).await;
+            yield LockResponse {
+                body: Some(lock_response::Body::Acquired(data)),
+            };
+
+            let data = match stream.next().await {
+                Some(req) => {
+                    let req = req?;
+                    req.expect_released()?
+                },
+                None => Err(Status::new(Code::DataLoss, "shard not released"))?,
+            };
+            connection.end(&id, data).await;
+
+            while let Some(req) = stream.next().await {
+                Err(Status::new(Code::FailedPrecondition, "connection closed"))?;
             }
         };
 
@@ -50,6 +73,7 @@ impl ServiceState {
     fn new() -> Self {
         ServiceState {
             repository: Repository::new(),
+            connections: ConnectionMap::new(),
         }
     }
 }

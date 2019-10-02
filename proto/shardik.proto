@@ -2,22 +2,20 @@ syntax = "proto3";
 
 package shardik;
 
-import "google/protobuf/empty.proto";
-
 service LockService {
   rpc Lock(stream LockRequest) returns (stream LockResponse) {}
 }
 
 message LockRequest {
   oneof body {
-    google.protobuf.Empty acquire = 1;
+    string acquire = 1;
     Data released = 2;
   }
 }
 
 message LockResponse {
   oneof body {
-    google.protobuf.Empty release = 1;
+    string release = 1;
     Data acquired = 2;
   }
 }
