@@ -1,0 +1,16 @@
+[package]
+name = "shardik"
+version = "0.1.0"
+authors = ["Andrew Hickman <andrew.hickman1@sky.com>"]
+edition = "2018"
+build = "build.rs"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tonic = "0.1.0-alpha.1"
+prost = "0.5.0"
+bytes = "0.4.12"
+
+[build-dependencies]
+tonic-build = "0.1.0-alpha.1"

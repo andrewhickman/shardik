@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package shardik;
+
+import "google/protobuf/empty.proto";
+
+service Shardik {
+  rpc Lock(stream Request) returns (stream Response) {}
+}
+
+message Request {
+  oneof body {
+    google.protobuf.Empty acquire = 1;
+    Data released = 2;
+  }
+}
+
+message Response {
+  oneof body {
+    google.protobuf.Empty release = 1;
+    Data acquired = 2;
+  }
+}
+
+message Data {
+  map<string, bool> claims = 1;
+}
