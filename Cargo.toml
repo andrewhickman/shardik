@@ -9,6 +9,10 @@ build = "build.rs"
 name = "server"
 path = "src/server/main.rs"
 
+[[bin]]
+name = "client"
+path = "src/client/main.rs"
+
 [dependencies]
 tonic = "0.1.0-alpha.1"
 tokio = "=0.2.0-alpha.6"
