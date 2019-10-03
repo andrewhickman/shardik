@@ -1,97 +1,33 @@
 #![recursion_limit = "256"]
 
 mod connection;
+mod service;
 
-use std::pin::Pin;
-use std::sync::Arc;
+use std::path::PathBuf;
 
-use futures::{Stream, StreamExt};
+use structopt::StructOpt;
 use tonic::transport::Server;
-use tonic::{Code, Request, Response, Status, Streaming};
 
-use crate::connection::ConnectionMap;
 use shardik::api::*;
+use shardik::resource::FileSystem;
+use crate::service::LockService;
 
-pub struct LockService {
-    state: Arc<ServiceState>,
-}
-
-pub struct ServiceState {
-    connections: ConnectionMap,
-}
-
-#[tonic::async_trait]
-impl server::LockService for LockService {
-    type LockStream = Pin<Box<dyn Stream<Item = Result<LockResponse, Status>> + Send + 'static>>;
-
-    async fn lock(
-        &self,
-        req: Request<Streaming<LockRequest>>,
-    ) -> Result<Response<Self::LockStream>, Status> {
-        log::info!("Lock request: {:?}", req);
-
-        let stream = req.into_inner();
-        let state = self.state.clone();
-
-        let res = async_stream::try_stream! {
-            futures::pin_mut!(stream);
-
-            let id = match stream.next().await {
-                Some(req) => {
-                    let req = req?;
-                    req.expect_acquire()?
-                },
-                None => return,
-            };
-            let (mut connection, data) = match state.connections.begin(&id).await {
-                Some(result) => result,
-                None => Err(Status::new(Code::NotFound, "key not found"))?,
-            };
-            yield LockResponse {
-                body: Some(lock_response::Body::Acquired(data)),
-            };
-
-            connection.wait().await.unwrap();
-            yield LockResponse {
-                body: Some(lock_response::Body::Release(id)),
-            };
-
-            let data = match stream.next().await {
-                Some(req) => {
-                    let req = req?;
-                    req.expect_released()?
-                },
-                None => Err(Status::new(Code::DataLoss, "shard not released"))?,
-            };
-            connection.release(data).unwrap();
-
-            while let Some(req) = stream.next().await {
-                Err(Status::new(Code::FailedPrecondition, "connection closed"))?;
-            }
-        };
-
-        Ok(Response::new(Box::pin(res) as Self::LockStream))
-    }
-}
-
-impl ServiceState {
-    fn new() -> Self {
-        ServiceState {
-            connections: ConnectionMap::new(),
-        }
-    }
+#[derive(StructOpt)]
+struct Opts {
+    #[structopt(long, parse(from_os_str))]
+    path: PathBuf,
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let opts = Opts::from_args();
     env_logger::init();
 
     let addr = "[::1]:10000".parse().unwrap();
     log::info!("Listening on: {}", addr);
 
-    let svc = server::LockServiceServer::new(LockService {
-        state: Arc::new(ServiceState::new()),
-    });
+    let resource = FileSystem::new(opts.path);
+    let svc = server::LockServiceServer::new(LockService::new(&resource));
     Server::builder().serve(addr, svc).await?;
     Ok(())
 }

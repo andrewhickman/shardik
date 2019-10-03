@@ -4,6 +4,7 @@ use chashmap::CHashMap;
 use futures::channel::oneshot;
 
 use shardik::api::Data;
+use shardik::resource::Resource;
 
 pub struct ConnectionMap {
     map: CHashMap<String, Shard>,
@@ -25,16 +26,17 @@ struct ConnectionSender {
 }
 
 impl ConnectionMap {
-    pub fn new() -> Self {
-        ConnectionMap {
-            map: (0..32)
-                .map(|id| {
-                    let id = id.to_string();
-                    let shard = Shard::new(&id);
-                    (id, shard)
-                })
-                .collect(),
+    pub fn new<R: Resource>(resource: &R) -> Self {
+        let map = CHashMap::new();
+        for (shard_id, id) in resource.keys() {
+            map.upsert(shard_id, Shard::default, |shard| match shard {
+                Shard::Unlocked(data) => {
+                    data.claims.insert(id, false);
+                }
+                _ => unreachable!(),
+            });
         }
+        ConnectionMap { map }
     }
 
     pub async fn begin(&self, id: &str) -> Option<(ConnectionReceiver, Data)> {
@@ -59,13 +61,9 @@ impl ConnectionMap {
     }
 }
 
-impl Shard {
-    fn new(shard_id: &str) -> Self {
-        Shard::Unlocked(Data {
-            claims: (0..256)
-                .map(|id| (format!("{}/{}", shard_id, id), false))
-                .collect(),
-        })
+impl Default for Shard {
+    fn default() -> Self {
+        Shard::Unlocked(Data::default())
     }
 }
 
