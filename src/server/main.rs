@@ -1,4 +1,4 @@
-#![recursion_limit="256"]
+#![recursion_limit = "256"]
 
 mod connection;
 
@@ -43,12 +43,15 @@ impl server::LockService for LockService {
                 },
                 None => return,
             };
-            let (mut connection, data) = state.connections.begin(&id).await;
+            let (mut connection, data) = match state.connections.begin(&id).await {
+                Some(result) => result,
+                None => Err(Status::new(Code::NotFound, "key not found"))?,
+            };
             yield LockResponse {
                 body: Some(lock_response::Body::Acquired(data)),
             };
 
-            connection.wait().await;
+            connection.wait().await.unwrap();
             yield LockResponse {
                 body: Some(lock_response::Body::Release(id)),
             };
