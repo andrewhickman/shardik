@@ -29,11 +29,13 @@ impl ConnectionMap {
     pub fn new<R: Resource>(resource: &R) -> Self {
         let map = CHashMap::new();
         for (shard_id, key) in resource.keys() {
-            map.upsert(shard_id, Shard::default, |shard| match shard {
-                Shard::Unlocked(data) => {
-                    data.claims.insert(key, false);
-                }
-                _ => unreachable!(),
+            map.alter(shard_id, |shard| {
+                let mut shard = shard.unwrap_or_default();
+                match shard {
+                    Shard::Unlocked(ref mut data) => data.claims.insert(key, false),
+                    _ => unreachable!(),
+                };
+                Some(shard)
             });
         }
         ConnectionMap { map }
@@ -54,7 +56,10 @@ impl ConnectionMap {
         let mut shard = self.map.get_mut(id)?;
         let data = match replace(&mut *shard, Shard::Locked(cur_sender)) {
             Shard::Unlocked(data) => data,
-            Shard::Locked(prev_sender) => prev_sender.acquire().await,
+            Shard::Locked(prev_sender) => {
+                log::info!("shard {} has existing lock, stealing", id);
+                prev_sender.acquire().await
+            },
         };
 
         Some((cur_receiver, data))

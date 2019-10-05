@@ -24,8 +24,6 @@ impl server::LockService for LockService {
         &self,
         req: Request<Streaming<LockRequest>>,
     ) -> Result<Response<Self::LockStream>, Status> {
-        log::info!("Lock request: {:?}", req);
-
         let stream = req.into_inner();
         let state = self.state.clone();
 
@@ -39,17 +37,20 @@ impl server::LockService for LockService {
                 },
                 None => return,
             };
+            log::info!("Received acquire request for shard {}", id);
             let (mut connection, data) = match state.connections.begin(&id).await {
                 Some(result) => result,
                 None => Err(Status::new(Code::NotFound, "key not found"))?,
             };
+            log::info!("Sending acquired response for shard {}", id);
             yield LockResponse {
                 body: Some(lock_response::Body::Acquired(data)),
             };
 
             connection.wait().await.unwrap();
+            log::info!("Sending release response for shard {}", id);
             yield LockResponse {
-                body: Some(lock_response::Body::Release(id)),
+                body: Some(lock_response::Body::Release(id.clone())),
             };
 
             let data = match stream.next().await {
@@ -59,9 +60,11 @@ impl server::LockService for LockService {
                 },
                 None => Err(Status::new(Code::DataLoss, "shard not released"))?,
             };
+            log::info!("Received released request for shard {}", id);
             connection.release(data).unwrap();
 
             if let Some(req) = stream.next().await {
+                log::error!("unexpected message {:?}", req);
                 Err(Status::new(Code::FailedPrecondition, "connection closed"))?;
             }
         };

@@ -27,10 +27,12 @@ impl<R: Resource> Lock<R> {
     }
 
     pub async fn lock(&mut self, key: &str) -> Result<bool, Box<dyn std::error::Error>> {
+        log::info!("Trying to lock key {}", key);
         self.set_locked(key, true).await
     }
 
     pub async fn unlock(&mut self, key: &str) -> Result<(), Box<dyn std::error::Error>> {
+        log::info!("Unlocking key {}", key);
         assert!(self.set_locked(key, false).await?);
         Ok(())
     }
@@ -46,6 +48,7 @@ impl<R: Resource> Lock<R> {
         let data = match entry {
             hash_map::Entry::Occupied(ref mut entry) => entry.get_mut(),
             hash_map::Entry::Vacant(entry) => {
+                log::warn!("Acquiring new shard {}", shard_id);
                 let (mut request_tx, request_rx) = mpsc::channel(0);
                 let mut response_rx = self
                     .client
@@ -91,6 +94,7 @@ async fn handle_release_inner(
         None => return Err("lock not released".into()),
     };
     let shard_id = response.expect_release()?;
+    log::warn!("shard {} stolen", shard_id);
 
     let data = cache.lock().unwrap().remove(&shard_id).unwrap();
     request_tx
@@ -98,8 +102,10 @@ async fn handle_release_inner(
             body: Some(lock_request::Body::Released(data)),
         }))
         .await?;
+    log::info!("sending released request for shard {}", shard_id);
 
-    if let Some(_) = response_rx.next().await {
+    if let Some(res) = response_rx.next().await {
+        log::error!("unexpected message {:?}", res);
         return Err("connection closed".into());
     }
     Ok(())

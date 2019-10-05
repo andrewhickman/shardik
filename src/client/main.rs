@@ -27,7 +27,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut lock: Lock<FileSystem> = Lock::new(client);
 
     let mut key = opts.key;
-    for _ in 0i32..1024 {
+    loop {
         if lock.lock(&key).await? {
             log::info!("Lock acquired on key {}", key);
             resource.access(&key);
@@ -37,6 +37,4 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         key = FileSystem::perturb_key(&key);
     }
-
-    Ok(())
 }
