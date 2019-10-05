@@ -28,10 +28,10 @@ struct ConnectionSender {
 impl ConnectionMap {
     pub fn new<R: Resource>(resource: &R) -> Self {
         let map = CHashMap::new();
-        for (shard_id, id) in resource.keys() {
+        for (shard_id, key) in resource.keys() {
             map.upsert(shard_id, Shard::default, |shard| match shard {
                 Shard::Unlocked(data) => {
-                    data.claims.insert(id, false);
+                    data.claims.insert(key, false);
                 }
                 _ => unreachable!(),
             });

@@ -1,9 +1,10 @@
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 pub trait Resource {
     fn keys(&self) -> Vec<(String, String)>;
 
+    fn get_shard_id(key: &str) -> String;
     fn perturb_key(key: &str) -> String;
     fn access(key: &str);
 }
@@ -32,6 +33,15 @@ impl Resource for FileSystem {
             }
         }
         keys
+    }
+
+    fn get_shard_id(key: &str) -> String {
+        Path::new(key)
+            .parent()
+            .unwrap_or("".as_ref())
+            .to_str()
+            .unwrap()
+            .to_owned()
     }
 
     fn perturb_key(_key: &str) -> String {

@@ -61,7 +61,7 @@ impl server::LockService for LockService {
             };
             connection.release(data).unwrap();
 
-            while let Some(req) = stream.next().await {
+            if let Some(req) = stream.next().await {
                 Err(Status::new(Code::FailedPrecondition, "connection closed"))?;
             }
         };

@@ -27,3 +27,23 @@ impl LockRequest {
         }
     }
 }
+
+impl LockResponse {
+    pub fn expect_acquired(self) -> Result<Data, Box<dyn std::error::Error>> {
+        match self {
+            LockResponse {
+                body: Some(lock_response::Body::Acquired(data)),
+            } => Ok(data),
+            _ => Err("expected response to be `acquired`".into()),
+        }
+    }
+
+    pub fn expect_release(self) -> Result<String, Box<dyn std::error::Error>> {
+        match self {
+            LockResponse {
+                body: Some(lock_response::Body::Release(id)),
+            } => Ok(id),
+            _ => Err("expected response to be `release`".into()),
+        }
+    }
+}

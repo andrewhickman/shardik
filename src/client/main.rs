@@ -1,13 +1,12 @@
-mod cache;
 mod lock;
 
 use std::path::PathBuf;
 
 use structopt::StructOpt;
 
+use crate::lock::Lock;
 use shardik::api::*;
 use shardik::resource::FileSystem;
-use crate::lock::Lock;
 
 #[derive(StructOpt)]
 struct Opts {
@@ -25,7 +24,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let resource = FileSystem::new(opts.path);
     let client = client::LockServiceClient::connect("http://[::1]:10000")?;
 
-    let lock = Lock::new(client);
+    let lock: Lock<FileSystem> = Lock::<FileSystem>::new(client);
 
     Ok(())
 }

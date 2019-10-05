@@ -8,9 +8,9 @@ use std::path::PathBuf;
 use structopt::StructOpt;
 use tonic::transport::Server;
 
+use crate::service::LockService;
 use shardik::api::*;
 use shardik::resource::FileSystem;
-use crate::service::LockService;
 
 #[derive(StructOpt)]
 struct Opts {
