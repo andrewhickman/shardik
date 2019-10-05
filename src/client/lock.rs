@@ -30,8 +30,9 @@ impl<R: Resource> Lock<R> {
         self.set_locked(key, true).await
     }
 
-    pub async fn unlock(&mut self, key: &str) -> Result<bool, Box<dyn std::error::Error>> {
-        self.set_locked(key, false).await
+    pub async fn unlock(&mut self, key: &str) -> Result<(), Box<dyn std::error::Error>> {
+        assert!(self.set_locked(key, false).await?);
+        Ok(())
     }
 
     async fn set_locked(
@@ -42,9 +43,9 @@ impl<R: Resource> Lock<R> {
         let shard_id = R::get_shard_id(key);
         let mut cache = self.cache.lock().unwrap();
         let mut entry = cache.entry(shard_id.clone());
-        let mut data = match entry {
+        let data = match entry {
             hash_map::Entry::Occupied(ref mut entry) => entry.get_mut(),
-            hash_map::Entry::Vacant(mut entry) => {
+            hash_map::Entry::Vacant(entry) => {
                 let (mut request_tx, request_rx) = mpsc::channel(0);
                 let mut response_rx = self
                     .client
@@ -57,7 +58,7 @@ impl<R: Resource> Lock<R> {
                         body: Some(lock_request::Body::Acquire(shard_id)),
                     }))
                     .await?;
-                let mut data = response_rx.next().await.unwrap()?.expect_acquired()?;
+                let data = response_rx.next().await.unwrap()?.expect_acquired()?;
 
                 tokio::spawn(handle_release(request_tx, response_rx, self.cache.clone()));
 
@@ -98,7 +99,7 @@ async fn handle_release_inner(
         }))
         .await?;
 
-    if let Some(response) = response_rx.next().await {
+    if let Some(_) = response_rx.next().await {
         return Err("connection closed".into());
     }
     Ok(())

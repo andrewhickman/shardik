@@ -6,7 +6,7 @@ use structopt::StructOpt;
 
 use crate::lock::Lock;
 use shardik::api::*;
-use shardik::resource::FileSystem;
+use shardik::resource::{FileSystem, Resource};
 
 #[derive(StructOpt)]
 struct Opts {
@@ -24,7 +24,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let resource = FileSystem::new(opts.path);
     let client = client::LockServiceClient::connect("http://[::1]:10000")?;
 
-    let lock: Lock<FileSystem> = Lock::<FileSystem>::new(client);
+    let mut lock: Lock<FileSystem> = Lock::new(client);
+
+    let mut key = opts.key;
+    for _ in 0i32..1024 {
+        if lock.lock(&key).await? {
+            log::info!("Lock acquired on key {}", key);
+            resource.access(&key);
+            lock.unlock(&key).await?;
+        } else {
+            log::info!("Failed to lock key {}", key);
+        }
+        key = FileSystem::perturb_key(&key);
+    }
 
     Ok(())
 }
