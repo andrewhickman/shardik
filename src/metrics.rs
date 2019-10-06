@@ -8,7 +8,7 @@ use structopt::StructOpt;
 #[derive(StructOpt)]
 pub struct MetricsOpts {
     /// The file to write metrics to.
-    #[structopt(long, parse(from_os_str))]
+    #[structopt(long, parse(from_os_str), default_value = "./metrics.csv")]
     metrics_file: PathBuf,
 }
 

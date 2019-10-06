@@ -8,18 +8,28 @@ build = "build.rs"
 [[bin]]
 name = "server"
 path = "src/server/main.rs"
+bench = false
 
 [[bin]]
 name = "client"
 path = "src/client/main.rs"
+bench = false
 
 [[bin]]
 name = "summary"
 path = "src/summary/main.rs"
+bench = false
+
+[lib]
+bench = false
+
+[[bench]]
+name = "multi_client"
+harness = false
 
 [dependencies]
 tonic = "0.1.0-alpha.1"
-tokio = "=0.2.0-alpha.6"
+tokio = { version = "=0.2.0-alpha.6", features = ["process"] }
 log = "0.4"
 futures-preview = "0.3.0-alpha.19"
 prost = "0.5"
@@ -34,6 +44,9 @@ rand_distr = "0.2.2"
 serde = { version = "1.0.101", features = ["derive"] }
 csv = "1.1.1"
 stats = { package = "streaming-stats", version = "0.2.2" }
+
+[dev-dependencies]
+criterion = "0.3.0"
 
 [build-dependencies]
 tonic-build = "0.1.0-alpha.1"
