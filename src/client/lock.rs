@@ -1,6 +1,7 @@
 use std::collections::hash_map::{self, HashMap};
 use std::mem::replace;
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use futures::channel::mpsc;
 use futures::{Sink, SinkExt, Stream, StreamExt};
@@ -29,7 +30,10 @@ impl<R: Resource> Lock<R> {
 
     pub async fn lock(&mut self, key: &str) -> Result<bool, Box<dyn std::error::Error>> {
         log::info!("Trying to lock key {}", key);
-        self.set_locked(key, true).await
+        let start = Instant::now();
+        let result = self.set_locked(key, true).await;
+        log::info!(target: "metrics", "locking key {} took {}µs", key, start.elapsed().as_micros());
+        result
     }
 
     pub async fn unlock(&mut self, key: &str) -> Result<(), Box<dyn std::error::Error>> {
