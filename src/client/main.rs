@@ -1,6 +1,7 @@
 mod lock;
 
-use std::path::PathBuf;
+use std::sync::Arc;
+use std::time::Duration;
 
 use structopt::StructOpt;
 
@@ -10,10 +11,17 @@ use shardik::resource::{FileSystem, Resource};
 
 #[derive(StructOpt)]
 struct Opts {
-    #[structopt(long, parse(from_os_str))]
-    path: PathBuf,
+    #[structopt(flatten)]
+    fs: FileSystem,
+    /// The initial key to lock.
     #[structopt(long)]
-    key: String,
+    initial_key: String,
+    /// How long to lock keys for when accessing in milliseconds.
+    #[structopt(long, default_value = "25")]
+    access_duration: u64,
+    /// The probability of switching shards when perturbing the key.
+    #[structopt(long, default_value = "0.1")]
+    perturb_shard_chance: f64,
 }
 
 #[tokio::main]
@@ -21,20 +29,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let opts = Opts::from_args();
     env_logger::init();
 
-    let resource = FileSystem::new(opts.path);
+    let resource = Arc::new(opts.fs);
     let client = client::LockServiceClient::connect("http://[::1]:10000")?;
+    let mut lock = Lock::new(client, resource.clone());
 
-    let mut lock: Lock<FileSystem> = Lock::new(client);
-
-    let mut key = opts.key;
+    let mut key = opts.initial_key;
     loop {
         if lock.lock(&key).await? {
             log::info!("Lock acquired on key {}", key);
-            resource.access(&key).await?;
+            resource
+                .access(&key, Duration::from_millis(opts.access_duration))
+                .await?;
             lock.unlock(&key).await?;
         } else {
             log::info!("Failed to lock key {}", key);
         }
-        key = FileSystem::perturb_key(&key);
+        key = resource.perturb_key(&key, opts.perturb_shard_chance);
     }
 }

@@ -1,7 +1,9 @@
 use std::pin::Pin;
 use std::sync::Arc;
+use std::time::Duration;
 
 use futures::{Stream, StreamExt};
+use tokio::timer;
 use tonic::{Code, Request, Response, Status, Streaming};
 
 use crate::connection::ConnectionMap;
@@ -10,6 +12,7 @@ use shardik::resource::Resource;
 
 pub struct LockService {
     connections: Arc<ConnectionMap>,
+    latency: Duration,
 }
 
 #[tonic::async_trait]
@@ -22,6 +25,7 @@ impl server::LockService for LockService {
     ) -> Result<Response<Self::LockStream>, Status> {
         let stream = req.into_inner();
         let connections = self.connections.clone();
+        let latency = self.latency;
 
         let res = async_stream::try_stream! {
             futures::pin_mut!(stream);
@@ -39,12 +43,14 @@ impl server::LockService for LockService {
                 None => Err(Status::new(Code::NotFound, "key not found"))?,
             };
             log::info!("Sending acquired response for shard {}", id);
+            timer::delay_for(latency).await;
             yield LockResponse {
                 body: Some(lock_response::Body::Acquired(data)),
             };
 
             connection.wait().await.unwrap();
             log::info!("Sending release response for shard {}", id);
+            timer::delay_for(latency).await;
             yield LockResponse {
                 body: Some(lock_response::Body::Release(id.clone())),
             };
@@ -70,9 +76,10 @@ impl server::LockService for LockService {
 }
 
 impl LockService {
-    pub fn new<R: Resource>(resource: &R) -> Self {
+    pub fn new<R: Resource>(resource: &R, latency: Duration) -> Self {
         LockService {
             connections: Arc::new(ConnectionMap::new(resource)),
+            latency,
         }
     }
 }

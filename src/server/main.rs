@@ -4,8 +4,8 @@ mod connection;
 mod service;
 
 use std::io::Write;
-use std::path::PathBuf;
 use std::thread;
+use std::time::Duration;
 
 use structopt::StructOpt;
 use tonic::transport::Server;
@@ -16,8 +16,11 @@ use shardik::resource::FileSystem;
 
 #[derive(StructOpt)]
 struct Opts {
-    #[structopt(long, parse(from_os_str))]
-    path: PathBuf,
+    #[structopt(flatten)]
+    fs: FileSystem,
+    /// The simulated latency of the service in milliseconds.
+    #[structopt(long, default_value = "40")]
+    latency: u64,
 }
 
 #[tokio::main]
@@ -38,8 +41,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "[::1]:10000".parse().unwrap();
     log::info!("Listening on: {}", addr);
 
-    let resource = FileSystem::new(opts.path);
-    let svc = server::LockServiceServer::new(LockService::new(&resource));
+    let resource = opts.fs;
+    let svc = server::LockServiceServer::new(LockService::new(
+        &resource,
+        Duration::from_millis(opts.latency),
+    ));
     Server::builder().serve(addr, svc).await?;
     Ok(())
 }

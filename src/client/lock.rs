@@ -1,5 +1,4 @@
 use std::collections::hash_map::{self, HashMap};
-use std::marker::PhantomData;
 use std::mem::replace;
 use std::sync::{Arc, Mutex};
 
@@ -16,15 +15,15 @@ pub struct Lock<R> {
     // Cached shard data. If the shard is Some then it is cached. If it is none then
     // it has been recently stolen by another client.
     cache: HashMap<String, Arc<Mutex<Option<ShardData>>>>,
-    _resource: PhantomData<R>,
+    resource: Arc<R>,
 }
 
 impl<R: Resource> Lock<R> {
-    pub fn new(client: client::LockServiceClient<Channel>) -> Self {
+    pub fn new(client: client::LockServiceClient<Channel>, resource: Arc<R>) -> Self {
         Lock {
             client,
             cache: HashMap::new(),
-            _resource: PhantomData,
+            resource,
         }
     }
 
@@ -46,7 +45,7 @@ impl<R: Resource> Lock<R> {
     ) -> Result<bool, Box<dyn std::error::Error>> {
         let set = |data: &mut ShardData| replace(data.locks.get_mut(key).unwrap(), value) != value;
 
-        let shard_id = R::get_shard_id(key);
+        let shard_id = self.resource.get_shard_id(key);
         if let hash_map::Entry::Occupied(entry) = self.cache.entry(shard_id.clone()) {
             {
                 let mut lock = entry.get().lock().unwrap();
