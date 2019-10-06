@@ -22,6 +22,9 @@ struct Opts {
     /// The initial key to lock.
     #[structopt(long)]
     initial_key: String,
+    /// The number of iterations to run for.
+    #[structopt(long)]
+    iterations: u64,
     /// How long to lock keys for when accessing in milliseconds.
     #[structopt(long, default_value = "25")]
     access_duration: u64,
@@ -41,7 +44,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut lock = Lock::new(opts.client_name, client, resource.clone(), metrics);
 
     let mut key = opts.initial_key;
-    loop {
+    for _ in 0..opts.iterations {
         if lock.lock(&key).await? {
             log::info!("Lock acquired on key {}", key);
             resource
@@ -53,4 +56,5 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         key = resource.perturb_key(&key, opts.perturb_shard_chance);
     }
+    Ok(())
 }
