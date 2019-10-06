@@ -9,6 +9,7 @@ use tonic::transport::Channel;
 use tonic::{Request, Status};
 
 use shardik::api::*;
+use shardik::metrics::Metrics;
 use shardik::resource::Resource;
 
 pub struct Lock<R> {
@@ -17,14 +18,23 @@ pub struct Lock<R> {
     // it has been recently stolen by another client.
     cache: HashMap<String, Arc<Mutex<Option<ShardData>>>>,
     resource: Arc<R>,
+    client_name: String,
+    metrics: Metrics,
 }
 
 impl<R: Resource> Lock<R> {
-    pub fn new(client: client::LockServiceClient<Channel>, resource: Arc<R>) -> Self {
+    pub fn new(
+        client_name: String,
+        client: client::LockServiceClient<Channel>,
+        resource: Arc<R>,
+        metrics: Metrics,
+    ) -> Self {
         Lock {
             client,
             cache: HashMap::new(),
             resource,
+            client_name,
+            metrics,
         }
     }
 
@@ -32,7 +42,7 @@ impl<R: Resource> Lock<R> {
         log::info!("Trying to lock key {}", key);
         let start = Instant::now();
         let result = self.set_locked(key, true).await;
-        log::info!(target: "metrics", "locking key {} took {}µs", key, start.elapsed().as_micros());
+        self.metrics.log(&self.client_name, key, start.elapsed())?;
         result
     }
 

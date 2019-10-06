@@ -7,12 +7,18 @@ use structopt::StructOpt;
 
 use crate::lock::Lock;
 use shardik::api::*;
+use shardik::metrics::{Metrics, MetricsOpts};
 use shardik::resource::{FileSystem, Resource};
 
 #[derive(StructOpt)]
 struct Opts {
     #[structopt(flatten)]
     fs: FileSystem,
+    #[structopt(flatten)]
+    metrics: MetricsOpts,
+    /// The name of the client.
+    #[structopt(long)]
+    client_name: String,
     /// The initial key to lock.
     #[structopt(long)]
     initial_key: String,
@@ -30,8 +36,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
 
     let resource = Arc::new(opts.fs);
+    let metrics = Metrics::new(opts.metrics)?;
     let client = client::LockServiceClient::connect("http://[::1]:10000")?;
-    let mut lock = Lock::new(client, resource.clone());
+    let mut lock = Lock::new(opts.client_name, client, resource.clone(), metrics);
 
     let mut key = opts.initial_key;
     loop {

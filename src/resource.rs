@@ -19,7 +19,7 @@ pub trait Resource {
 #[derive(StructOpt)]
 pub struct FileSystem {
     /// The base directory to create files in.
-    #[structopt(long, parse(from_os_str))]
+    #[structopt(long, parse(from_os_str), default_value = "./resources")]
     base_path: PathBuf,
     /// The number of shards to create.
     #[structopt(long, default_value = "32")]

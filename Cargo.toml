@@ -27,6 +27,8 @@ structopt = "0.3.2"
 fs2 = "0.4.3"
 rand = "0.7.2"
 rand_distr = "0.2.2"
+serde = { version = "1.0.101", features = ["derive"] }
+csv = "1.1.1"
 
 [build-dependencies]
 tonic-build = "0.1.0-alpha.1"
