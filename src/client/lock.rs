@@ -18,13 +18,13 @@ pub struct Lock<R> {
     // it has been recently stolen by another client.
     cache: HashMap<String, Arc<Mutex<Option<ShardData>>>>,
     resource: Arc<R>,
-    client_name: String,
+    client_name: Option<String>,
     metrics: Metrics,
 }
 
 impl<R: Resource> Lock<R> {
     pub fn new(
-        client_name: String,
+        client_name: Option<String>,
         client: client::LockServiceClient<Channel>,
         resource: Arc<R>,
         metrics: Metrics,

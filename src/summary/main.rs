@@ -18,10 +18,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let min_max: stats::MinMax<f64> = nanos(&records).collect();
-    println!("min:\t{}", min_max.min().unwrap());
-    println!("max:\t{}", min_max.max().unwrap());
-    println!("mean:\t{}", stats::mean(nanos(&records)));
-    println!("median:\t{}", stats::median(nanos(&records)).unwrap());
+    println!("min:\t{:.0} ns", min_max.min().unwrap());
+    println!("max:\t{:.0} ns", min_max.max().unwrap());
+    println!("mean:\t{:.0} ns", stats::mean(nanos(&records)));
+    println!("median:\t{:.0} ns", stats::median(nanos(&records)).unwrap());
 
     Ok(())
 }

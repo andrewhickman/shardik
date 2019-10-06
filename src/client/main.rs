@@ -18,7 +18,7 @@ struct Opts {
     metrics: MetricsOpts,
     /// The name of the client.
     #[structopt(long)]
-    client_name: String,
+    client_name: Option<String>,
     /// The initial key to lock.
     #[structopt(long)]
     initial_key: String,

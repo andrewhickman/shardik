@@ -18,7 +18,7 @@ pub struct Metrics {
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct Record<'a> {
-    pub client_name: Cow<'a, str>,
+    pub client_name: Option<Cow<'a, str>>,
     pub key: Cow<'a, str>,
     pub nanos: u128,
 }
@@ -36,10 +36,10 @@ impl Metrics {
         Ok(Metrics { writer })
     }
 
-    pub fn log(&mut self, client_name: &str, key: &str, dur: Duration) -> csv::Result<()> {
+    pub fn log(&mut self, client_name: &Option<String>, key: &str, dur: Duration) -> csv::Result<()> {
         self.writer.serialize(Record {
             key: Cow::Borrowed(key),
-            client_name: Cow::Borrowed(client_name),
+            client_name: client_name.as_ref().map(Cow::from),
             nanos: dur.as_nanos(),
         })
     }
