@@ -30,7 +30,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     loop {
         if lock.lock(&key).await? {
             log::info!("Lock acquired on key {}", key);
-            resource.access(&key);
+            resource.access(&key).await?;
             lock.unlock(&key).await?;
         } else {
             log::info!("Failed to lock key {}", key);
