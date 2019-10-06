@@ -1,11 +1,11 @@
 use std::path::PathBuf;
-use std::{fs, io};
 use std::time::Duration;
+use std::{fs, io};
 
-use tokio::timer;
 use fs2::FileExt;
 use rand::prelude::*;
 use rand_distr::Poisson;
+use tokio::timer;
 
 #[tonic::async_trait]
 pub trait Resource {

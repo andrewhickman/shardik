@@ -59,7 +59,7 @@ impl ConnectionMap {
             Shard::Locked(prev_sender) => {
                 log::info!("shard {} has existing lock, stealing", id);
                 prev_sender.acquire().await
-            },
+            }
         };
 
         Some((cur_receiver, data))

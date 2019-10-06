@@ -13,7 +13,7 @@ use shardik::resource::Resource;
 
 pub struct Lock<R> {
     client: client::LockServiceClient<Channel>,
-    cache: Arc<Mutex<HashMap<String, Data>>>,
+    cache: HashMap<String, Arc<Mutex<Option<Data>>>>,
     _resource: PhantomData<R>,
 }
 
@@ -21,7 +21,7 @@ impl<R: Resource> Lock<R> {
     pub fn new(client: client::LockServiceClient<Channel>) -> Self {
         Lock {
             client,
-            cache: Arc::default(),
+            cache: HashMap::new(),
             _resource: PhantomData,
         }
     }
@@ -42,42 +42,49 @@ impl<R: Resource> Lock<R> {
         key: &str,
         value: bool,
     ) -> Result<bool, Box<dyn std::error::Error>> {
+        let set = |data: &mut Data| replace(data.claims.get_mut(key).unwrap(), value) != value;
+
         let shard_id = R::get_shard_id(key);
-        let mut cache = self.cache.lock().unwrap();
-        let mut entry = cache.entry(shard_id.clone());
-        let data = match entry {
-            hash_map::Entry::Occupied(ref mut entry) => entry.get_mut(),
-            hash_map::Entry::Vacant(entry) => {
-                log::warn!("Acquiring new shard {}", shard_id);
-                let (mut request_tx, request_rx) = mpsc::channel(0);
-                let mut response_rx = self
-                    .client
-                    .lock(Request::new(request_rx))
-                    .await?
-                    .into_inner();
-
-                request_tx
-                    .send(Ok(LockRequest {
-                        body: Some(lock_request::Body::Acquire(shard_id)),
-                    }))
-                    .await?;
-                let data = response_rx.next().await.unwrap()?.expect_acquired()?;
-
-                tokio::spawn(handle_release(request_tx, response_rx, self.cache.clone()));
-
-                entry.insert(data)
+        if let hash_map::Entry::Occupied(entry) = self.cache.entry(shard_id.clone()) {
+            {
+                let mut lock = entry.get().lock().unwrap();
+                if let Some(data) = lock.as_mut() {
+                    return Ok(set(data));
+                }
             }
-        };
-        Ok(replace(data.claims.get_mut(key).unwrap(), value) != value)
+            entry.remove_entry();
+        }
+
+        log::warn!("Acquiring new shard {}", shard_id);
+        let (mut request_tx, request_rx) = mpsc::channel(0);
+        let mut response_rx = self
+            .client
+            .lock(Request::new(request_rx))
+            .await?
+            .into_inner();
+
+        request_tx
+            .send(Ok(LockRequest {
+                body: Some(lock_request::Body::Acquire(shard_id)),
+            }))
+            .await?;
+        let mut data = response_rx.next().await.unwrap()?.expect_acquired()?;
+
+        let result = set(&mut data);
+
+        let data = Arc::new(Mutex::new(Some(data)));
+        tokio::spawn(handle_release(request_tx, response_rx, data.clone()));
+
+        Ok(result)
     }
 }
 
 async fn handle_release(
     request_tx: impl Sink<Result<LockRequest, Status>, Error = mpsc::SendError>,
     response_rx: impl Stream<Item = Result<LockResponse, Status>>,
-    cache: Arc<Mutex<HashMap<String, Data>>>,
+    data: Arc<Mutex<Option<Data>>>,
 ) {
-    if let Err(err) = handle_release_inner(request_tx, response_rx, cache).await {
+    if let Err(err) = handle_release_inner(request_tx, response_rx, data).await {
         log::error!("Handle release failed: {}", err);
     }
 }
@@ -85,7 +92,7 @@ async fn handle_release(
 async fn handle_release_inner(
     request_tx: impl Sink<Result<LockRequest, Status>, Error = mpsc::SendError>,
     response_rx: impl Stream<Item = Result<LockResponse, Status>>,
-    cache: Arc<Mutex<HashMap<String, Data>>>,
+    data: Arc<Mutex<Option<Data>>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     futures::pin_mut!(request_tx);
     futures::pin_mut!(response_rx);
@@ -96,7 +103,7 @@ async fn handle_release_inner(
     let shard_id = response.expect_release()?;
     log::warn!("shard {} stolen", shard_id);
 
-    let data = cache.lock().unwrap().remove(&shard_id).unwrap();
+    let data = data.lock().unwrap().take().unwrap();
     request_tx
         .send(Ok(LockRequest {
             body: Some(lock_request::Body::Released(data)),
