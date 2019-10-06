@@ -9,17 +9,17 @@ service LockService {
 message LockRequest {
   oneof body {
     string acquire = 1;
-    Data released = 2;
+    ShardData released = 2;
   }
 }
 
 message LockResponse {
   oneof body {
     string release = 1;
-    Data acquired = 2;
+    ShardData acquired = 2;
   }
 }
 
-message Data {
-  map<string, bool> claims = 1;
+message ShardData {
+  map<string, bool> locks = 1;
 }

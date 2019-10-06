@@ -15,7 +15,7 @@ impl LockRequest {
         }
     }
 
-    pub fn expect_released(self) -> Result<Data, Status> {
+    pub fn expect_released(self) -> Result<ShardData, Status> {
         match self {
             LockRequest {
                 body: Some(lock_request::Body::Released(data)),
@@ -29,7 +29,7 @@ impl LockRequest {
 }
 
 impl LockResponse {
-    pub fn expect_acquired(self) -> Result<Data, Box<dyn std::error::Error>> {
+    pub fn expect_acquired(self) -> Result<ShardData, Box<dyn std::error::Error>> {
         match self {
             LockResponse {
                 body: Some(lock_response::Body::Acquired(data)),

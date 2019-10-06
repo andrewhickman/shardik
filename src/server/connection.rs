@@ -3,7 +3,7 @@ use std::mem::replace;
 use chashmap::CHashMap;
 use futures::channel::oneshot;
 
-use shardik::api::Data;
+use shardik::api::ShardData;
 use shardik::resource::Resource;
 
 pub struct ConnectionMap {
@@ -12,7 +12,7 @@ pub struct ConnectionMap {
 
 enum Shard {
     /// No client currently owns this shard.
-    Unlocked(Data),
+    Unlocked(ShardData),
     /// A client currently owns this shard. It can be stolen by sending a request to the
     /// `ConnectionSender`.
     Locked(ConnectionSender),
@@ -20,12 +20,12 @@ enum Shard {
 
 pub struct ConnectionReceiver {
     request_rx: Option<oneshot::Receiver<()>>,
-    response_tx: Option<oneshot::Sender<Data>>,
+    response_tx: Option<oneshot::Sender<ShardData>>,
 }
 
 struct ConnectionSender {
     request_tx: oneshot::Sender<()>,
-    response_rx: oneshot::Receiver<Data>,
+    response_rx: oneshot::Receiver<ShardData>,
 }
 
 impl ConnectionMap {
@@ -35,7 +35,7 @@ impl ConnectionMap {
             map.alter(shard_id, |shard| {
                 let mut shard = shard.unwrap_or_default();
                 match shard {
-                    Shard::Unlocked(ref mut data) => data.claims.insert(key, false),
+                    Shard::Unlocked(ref mut data) => data.locks.insert(key, false),
                     _ => unreachable!(),
                 };
                 Some(shard)
@@ -46,7 +46,7 @@ impl ConnectionMap {
 
     /// Gets a shard with the given id, returning the shard data and a `ConnectionReceiver` to
     /// listen to to know when to release the shard.
-    pub async fn begin(&self, id: &str) -> Option<(ConnectionReceiver, Data)> {
+    pub async fn begin(&self, id: &str) -> Option<(ConnectionReceiver, ShardData)> {
         let (request_tx, request_rx) = oneshot::channel();
         let (response_tx, response_rx) = oneshot::channel();
         let cur_sender = ConnectionSender {
@@ -76,7 +76,7 @@ impl ConnectionMap {
 
 impl Default for Shard {
     fn default() -> Self {
-        Shard::Unlocked(Data::default())
+        Shard::Unlocked(ShardData::default())
     }
 }
 
@@ -87,7 +87,7 @@ impl ConnectionReceiver {
     }
 
     /// Send the shard data to the client which requested the shard
-    pub fn release(&mut self, data: Data) -> Result<(), Data> {
+    pub fn release(&mut self, data: ShardData) -> Result<(), ShardData> {
         self.response_tx
             .take()
             .expect("already released")
@@ -97,7 +97,7 @@ impl ConnectionReceiver {
 
 impl ConnectionSender {
     /// Request the shard from another client, and wait for it to be returned.
-    pub async fn acquire(self) -> Data {
+    pub async fn acquire(self) -> ShardData {
         self.request_tx.send(()).unwrap();
         self.response_rx.await.unwrap()
     }

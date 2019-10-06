@@ -15,7 +15,7 @@ pub struct Lock<R> {
     client: client::LockServiceClient<Channel>,
     // Cached shard data. If the shard is Some then it is cached. If it is none then
     // it has been recently stolen by another client.
-    cache: HashMap<String, Arc<Mutex<Option<Data>>>>,
+    cache: HashMap<String, Arc<Mutex<Option<ShardData>>>>,
     _resource: PhantomData<R>,
 }
 
@@ -44,7 +44,7 @@ impl<R: Resource> Lock<R> {
         key: &str,
         value: bool,
     ) -> Result<bool, Box<dyn std::error::Error>> {
-        let set = |data: &mut Data| replace(data.claims.get_mut(key).unwrap(), value) != value;
+        let set = |data: &mut ShardData| replace(data.locks.get_mut(key).unwrap(), value) != value;
 
         let shard_id = R::get_shard_id(key);
         if let hash_map::Entry::Occupied(entry) = self.cache.entry(shard_id.clone()) {
@@ -66,7 +66,7 @@ impl<R: Resource> Lock<R> {
     async fn acquire(
         &mut self,
         shard_id: String,
-        set: impl FnOnce(&mut Data) -> bool,
+        set: impl FnOnce(&mut ShardData) -> bool,
     ) -> Result<bool, Box<dyn std::error::Error>> {
         log::warn!("Acquiring new shard {}", shard_id);
         let (mut request_tx, request_rx) = mpsc::channel(0);
@@ -97,7 +97,7 @@ impl<R: Resource> Lock<R> {
 async fn handle_release(
     request_tx: impl Sink<Result<LockRequest, Status>, Error = mpsc::SendError>,
     response_rx: impl Stream<Item = Result<LockResponse, Status>>,
-    data: Arc<Mutex<Option<Data>>>,
+    data: Arc<Mutex<Option<ShardData>>>,
 ) {
     if let Err(err) = handle_release_inner(request_tx, response_rx, data).await {
         log::error!("Handle release failed: {}", err);
@@ -109,7 +109,7 @@ async fn handle_release(
 async fn handle_release_inner(
     request_tx: impl Sink<Result<LockRequest, Status>, Error = mpsc::SendError>,
     response_rx: impl Stream<Item = Result<LockResponse, Status>>,
-    data: Arc<Mutex<Option<Data>>>,
+    data: Arc<Mutex<Option<ShardData>>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     futures::pin_mut!(request_tx);
     futures::pin_mut!(response_rx);
