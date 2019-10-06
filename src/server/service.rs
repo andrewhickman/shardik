@@ -9,11 +9,7 @@ use shardik::api::*;
 use shardik::resource::Resource;
 
 pub struct LockService {
-    state: Arc<ServiceState>,
-}
-
-struct ServiceState {
-    connections: ConnectionMap,
+    connections: Arc<ConnectionMap>,
 }
 
 #[tonic::async_trait]
@@ -25,7 +21,7 @@ impl server::LockService for LockService {
         req: Request<Streaming<LockRequest>>,
     ) -> Result<Response<Self::LockStream>, Status> {
         let stream = req.into_inner();
-        let state = self.state.clone();
+        let connections = self.connections.clone();
 
         let res = async_stream::try_stream! {
             futures::pin_mut!(stream);
@@ -38,7 +34,7 @@ impl server::LockService for LockService {
                 None => return,
             };
             log::info!("Received acquire request for shard {}", id);
-            let (mut connection, data) = match state.connections.begin(&id).await {
+            let (mut connection, data) = match connections.begin(&id).await {
                 Some(result) => result,
                 None => Err(Status::new(Code::NotFound, "key not found"))?,
             };
@@ -76,15 +72,7 @@ impl server::LockService for LockService {
 impl LockService {
     pub fn new<R: Resource>(resource: &R) -> Self {
         LockService {
-            state: Arc::new(ServiceState::new(resource)),
-        }
-    }
-}
-
-impl ServiceState {
-    fn new<R: Resource>(resource: &R) -> Self {
-        ServiceState {
-            connections: ConnectionMap::new(resource),
+            connections: Arc::new(ConnectionMap::new(resource)),
         }
     }
 }

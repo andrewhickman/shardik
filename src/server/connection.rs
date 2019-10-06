@@ -11,7 +11,10 @@ pub struct ConnectionMap {
 }
 
 enum Shard {
+    /// No client currently owns this shard.
     Unlocked(Data),
+    /// A client currently owns this shard. It can be stolen by sending a request to the
+    /// `ConnectionSender`.
     Locked(ConnectionSender),
 }
 
@@ -41,6 +44,8 @@ impl ConnectionMap {
         ConnectionMap { map }
     }
 
+    /// Gets a shard with the given id, returning the shard data and a `ConnectionReceiver` to
+    /// listen to to know when to release the shard.
     pub async fn begin(&self, id: &str) -> Option<(ConnectionReceiver, Data)> {
         let (request_tx, request_rx) = oneshot::channel();
         let (response_tx, response_rx) = oneshot::channel();
@@ -76,10 +81,12 @@ impl Default for Shard {
 }
 
 impl ConnectionReceiver {
+    /// Wait until another client requests the shard
     pub async fn wait(&mut self) -> Result<(), oneshot::Canceled> {
         self.request_rx.take().expect("already waited").await
     }
 
+    /// Send the shard data to the client which requested the shard
     pub fn release(&mut self, data: Data) -> Result<(), Data> {
         self.response_tx
             .take()
@@ -89,6 +96,7 @@ impl ConnectionReceiver {
 }
 
 impl ConnectionSender {
+    /// Request the shard from another client, and wait for it to be returned.
     pub async fn acquire(self) -> Data {
         self.request_tx.send(()).unwrap();
         self.response_rx.await.unwrap()

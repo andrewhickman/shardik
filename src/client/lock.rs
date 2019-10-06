@@ -13,6 +13,8 @@ use shardik::resource::Resource;
 
 pub struct Lock<R> {
     client: client::LockServiceClient<Channel>,
+    // Cached shard data. If the shard is Some then it is cached. If it is none then
+    // it has been recently stolen by another client.
     cache: HashMap<String, Arc<Mutex<Option<Data>>>>,
     _resource: PhantomData<R>,
 }
@@ -49,12 +51,23 @@ impl<R: Resource> Lock<R> {
             {
                 let mut lock = entry.get().lock().unwrap();
                 if let Some(data) = lock.as_mut() {
+                    // The shard is cached.
                     return Ok(set(data));
                 }
             }
+            // The cached shard was stolen by another thread, remove the entry.
             entry.remove_entry();
         }
 
+        // Need to acquire the shard from the server.
+        self.acquire(shard_id, set).await
+    }
+
+    async fn acquire(
+        &mut self,
+        shard_id: String,
+        set: impl FnOnce(&mut Data) -> bool,
+    ) -> Result<bool, Box<dyn std::error::Error>> {
         log::warn!("Acquiring new shard {}", shard_id);
         let (mut request_tx, request_rx) = mpsc::channel(0);
         let mut response_rx = self
@@ -72,6 +85,8 @@ impl<R: Resource> Lock<R> {
 
         let result = set(&mut data);
 
+        // Launch a background task to handle releasing the shard lock when requested by
+        // the server.
         let data = Arc::new(Mutex::new(Some(data)));
         tokio::spawn(handle_release(request_tx, response_rx, data.clone()));
 
@@ -89,6 +104,8 @@ async fn handle_release(
     }
 }
 
+/// Waits for the server to send a `Release` message on `response_rx` and then releases
+/// the cached shard.
 async fn handle_release_inner(
     request_tx: impl Sink<Result<LockRequest, Status>, Error = mpsc::SendError>,
     response_rx: impl Stream<Item = Result<LockResponse, Status>>,
@@ -96,6 +113,7 @@ async fn handle_release_inner(
 ) -> Result<(), Box<dyn std::error::Error>> {
     futures::pin_mut!(request_tx);
     futures::pin_mut!(response_rx);
+
     let response = match response_rx.next().await {
         Some(response) => response?,
         None => return Err("lock not released".into()),

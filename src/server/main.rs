@@ -3,9 +3,9 @@
 mod connection;
 mod service;
 
+use std::io::Write;
 use std::path::PathBuf;
 use std::thread;
-use std::io::Write;
 
 use structopt::StructOpt;
 use tonic::transport::Server;
