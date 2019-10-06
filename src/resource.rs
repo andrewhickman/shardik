@@ -52,10 +52,10 @@ impl Resource for FileSystem {
         let (mut shard_id, mut item_id) = parse_key(key);
 
         let mut rng = rand::thread_rng();
-        item_id = perturb(&mut rng, item_id, ITEM_COUNT);
+        item_id = perturb(&mut rng, item_id, 4.0, ITEM_COUNT);
 
         if rng.gen_bool(0.1) {
-            shard_id = perturb(&mut rng, shard_id, SHARD_COUNT);
+            shard_id = perturb(&mut rng, shard_id, 0.5, SHARD_COUNT);
         }
 
         format_key(shard_id, item_id)
@@ -85,8 +85,8 @@ fn parse_key(key: &str) -> (u32, u32) {
     (shard_id, item_id)
 }
 
-fn perturb(rng: &mut impl Rng, value: u32, max: u32) -> u32 {
-    let distr = Poisson::new(4.0).unwrap();
+fn perturb(rng: &mut impl Rng, value: u32, lambda: f64, max: u32) -> u32 {
+    let distr = Poisson::new(lambda).unwrap();
     let abs_offset: u64 = distr.sample(rng);
     let offset = if rng.gen() {
         abs_offset as i32
