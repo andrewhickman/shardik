@@ -53,8 +53,11 @@ impl ConnectionMap {
             response_tx: Some(response_tx),
         };
 
-        let mut shard = self.map.get_mut(id)?;
-        let data = match replace(&mut *shard, Shard::Locked(cur_sender)) {
+        let prev_shard = {
+            let mut shard = self.map.get_mut(id)?;
+            replace(&mut *shard, Shard::Locked(cur_sender))
+        };
+        let data = match prev_shard {
             Shard::Unlocked(data) => data,
             Shard::Locked(prev_sender) => {
                 log::info!("shard {} has existing lock, stealing", id);
