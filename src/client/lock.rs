@@ -77,7 +77,7 @@ impl<R: Resource> Lock<R> {
 
         request_tx
             .send(Ok(LockRequest {
-                body: Some(lock_request::Body::Acquire(shard_id)),
+                body: Some(lock_request::Body::Acquire(shard_id.clone())),
             }))
             .await?;
         let mut data = response_rx.next().await.unwrap()?.expect_acquired()?;
@@ -88,6 +88,7 @@ impl<R: Resource> Lock<R> {
         // the server.
         let data = Arc::new(Mutex::new(Some(data)));
         tokio::spawn(handle_release(request_tx, response_rx, data.clone()));
+        self.cache.insert(shard_id, data);
 
         Ok(result)
     }
