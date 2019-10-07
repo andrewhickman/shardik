@@ -56,5 +56,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         key = resource.perturb_key(&key, opts.perturb_shard_chance);
     }
+
+    lock.release_all().await;
+
     Ok(())
 }

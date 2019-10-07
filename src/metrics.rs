@@ -36,7 +36,12 @@ impl Metrics {
         Ok(Metrics { writer })
     }
 
-    pub fn log(&mut self, client_name: &Option<String>, key: &str, dur: Duration) -> csv::Result<()> {
+    pub fn log(
+        &mut self,
+        client_name: &Option<String>,
+        key: &str,
+        dur: Duration,
+    ) -> csv::Result<()> {
         self.writer.serialize(Record {
             key: Cow::Borrowed(key),
             client_name: client_name.as_ref().map(Cow::from),

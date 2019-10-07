@@ -1,46 +1,39 @@
+use std::collections::HashMap;
 use std::mem::replace;
 
 use chashmap::CHashMap;
 use futures::channel::oneshot;
+use futures::Future;
 
 use shardik::api::ShardData;
 use shardik::resource::Resource;
 
 pub struct ConnectionMap {
-    map: CHashMap<String, Shard>,
-}
-
-enum Shard {
-    /// No client currently owns this shard.
-    Unlocked(ShardData),
-    /// A client currently owns this shard. It can be stolen by sending a request to the
-    /// `ConnectionSender`.
-    Locked(ConnectionSender),
+    map: CHashMap<String, ConnectionSender>,
 }
 
 pub struct ConnectionReceiver {
-    request_rx: Option<oneshot::Receiver<()>>,
-    response_tx: Option<oneshot::Sender<ShardData>>,
+    pub request_rx: oneshot::Receiver<String>,
+    pub response_tx: oneshot::Sender<ShardData>,
 }
 
 struct ConnectionSender {
-    request_tx: oneshot::Sender<()>,
+    request_tx: oneshot::Sender<String>,
     response_rx: oneshot::Receiver<ShardData>,
 }
 
 impl ConnectionMap {
     pub fn new<R: Resource>(resource: &R) -> Self {
-        let map = CHashMap::new();
+        let mut map = HashMap::<String, ShardData>::new();
         for (shard_id, key) in resource.keys() {
-            map.alter(shard_id, |shard| {
-                let mut shard = shard.unwrap_or_default();
-                match shard {
-                    Shard::Unlocked(ref mut data) => data.locks.insert(key, false),
-                    _ => unreachable!(),
-                };
-                Some(shard)
-            });
+            map.entry(shard_id).or_default().locks.insert(key, false);
         }
+
+        let map = map
+            .into_iter()
+            .map(|(k, v)| (k, ConnectionSender::from_data(v)))
+            .collect();
+
         ConnectionMap { map }
     }
 
@@ -54,51 +47,48 @@ impl ConnectionMap {
             response_rx,
         };
         let cur_receiver = ConnectionReceiver {
-            request_rx: Some(request_rx),
-            response_tx: Some(response_tx),
+            request_rx,
+            response_tx,
         };
 
-        let prev_shard = {
+        let prev_sender = {
             let mut shard = self.map.get_mut(id)?;
-            replace(&mut *shard, Shard::Locked(cur_sender))
+            replace(&mut *shard, cur_sender)
         };
-        let data = match prev_shard {
-            Shard::Unlocked(data) => data,
-            Shard::Locked(prev_sender) => {
-                log::info!("shard {} has existing lock, stealing", id);
-                prev_sender.acquire().await
-            }
-        };
+        let data = prev_sender.acquire(id.to_owned()).await;
 
         Some((cur_receiver, data))
     }
 }
 
-impl Default for Shard {
-    fn default() -> Self {
-        Shard::Unlocked(ShardData::default())
-    }
-}
-
 impl ConnectionReceiver {
-    /// Wait until another client requests the shard
-    pub async fn wait(&mut self) -> Result<(), oneshot::Canceled> {
-        self.request_rx.take().expect("already waited").await
-    }
-
-    /// Send the shard data to the client which requested the shard
-    pub fn release(&mut self, data: ShardData) -> Result<(), ShardData> {
-        self.response_tx
-            .take()
-            .expect("already released")
-            .send(data)
+    pub async fn request_release<F, T>(request_rx: oneshot::Receiver<String>, release: F)
+    where
+        F: FnOnce(String) -> T,
+        T: Future,
+    {
+        if let Ok(shard_id) = request_rx.await {
+            release(shard_id).await;
+        }
     }
 }
 
 impl ConnectionSender {
+    fn from_data(data: ShardData) -> Self {
+        let (request_tx, _) = oneshot::channel();
+        let (response_tx, response_rx) = oneshot::channel();
+
+        response_tx.send(data).unwrap();
+
+        ConnectionSender {
+            request_tx,
+            response_rx,
+        }
+    }
+
     /// Request the shard from another client, and wait for it to be returned.
-    pub async fn acquire(self) -> ShardData {
-        self.request_tx.send(()).unwrap();
+    pub async fn acquire(self, id: String) -> ShardData {
+        let _ = self.request_tx.send(id);
         self.response_rx.await.unwrap()
     }
 }

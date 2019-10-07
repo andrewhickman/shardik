@@ -4,7 +4,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use futures::channel::mpsc;
-use futures::{Sink, SinkExt, Stream, StreamExt};
+use futures::future::join_all;
+use futures::{SinkExt, Stream, StreamExt};
 use tonic::transport::Channel;
 use tonic::{Request, Status};
 
@@ -14,12 +15,18 @@ use shardik::resource::Resource;
 
 pub struct Lock<R> {
     client: client::LockServiceClient<Channel>,
-    // Cached shard data. If the shard is Some then it is cached. If it is none then
-    // it has been recently stolen by another client.
-    cache: HashMap<String, Arc<Mutex<Option<ShardData>>>>,
+    cache: HashMap<String, CacheEntry>,
     resource: Arc<R>,
     client_name: Option<String>,
     metrics: Metrics,
+}
+
+/// Represents cached shard data. If `data` is Some then it is cached. If it is none then
+/// it has been recently stolen by another client.
+#[derive(Debug, Clone)]
+struct CacheEntry {
+    data: Arc<Mutex<Option<ShardData>>>,
+    request_tx: mpsc::Sender<Result<LockRequest, Status>>,
 }
 
 impl<R: Resource> Lock<R> {
@@ -62,7 +69,7 @@ impl<R: Resource> Lock<R> {
         let shard_id = self.resource.get_shard_id(key);
         if let hash_map::Entry::Occupied(entry) = self.cache.entry(shard_id.clone()) {
             {
-                let mut lock = entry.get().lock().unwrap();
+                let mut lock = entry.get().data.lock().unwrap();
                 if let Some(data) = lock.as_mut() {
                     // The shard is cached.
                     return Ok(set(data));
@@ -100,20 +107,52 @@ impl<R: Resource> Lock<R> {
 
         // Launch a background task to handle releasing the shard lock when requested by
         // the server.
-        let data = Arc::new(Mutex::new(Some(data)));
-        tokio::spawn(handle_release(request_tx, response_rx, data.clone()));
-        self.cache.insert(shard_id, data);
+        let cache_entry = CacheEntry {
+            data: Arc::new(Mutex::new(Some(data))),
+            request_tx,
+        };
+        tokio::spawn(handle_release(cache_entry.clone(), response_rx));
+        self.cache.insert(shard_id, cache_entry);
 
         Ok(result)
+    }
+
+    pub async fn release_all(&mut self) {
+        join_all(self.cache.drain().map(|(shard_id, cache_entry)| {
+            async {
+                futures::pin_mut!(shard_id);
+                futures::pin_mut!(cache_entry);
+
+                log::info!("sending released request for shard {}", shard_id);
+                if let Err(err) = cache_entry.release().await {
+                    log::error!("failed to release shard {}: {}", shard_id, err);
+                }
+            }
+        }))
+        .await;
+    }
+}
+
+impl CacheEntry {
+    async fn release(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let data = match self.data.lock().unwrap().take() {
+            Some(data) => data,
+            None => return Ok(()),
+        };
+        self.request_tx
+            .send(Ok(LockRequest {
+                body: Some(lock_request::Body::Released(data)),
+            }))
+            .await?;
+        Ok(())
     }
 }
 
 async fn handle_release(
-    request_tx: impl Sink<Result<LockRequest, Status>, Error = mpsc::SendError>,
+    entry: CacheEntry,
     response_rx: impl Stream<Item = Result<LockResponse, Status>>,
-    data: Arc<Mutex<Option<ShardData>>>,
 ) {
-    if let Err(err) = handle_release_inner(request_tx, response_rx, data).await {
+    if let Err(err) = handle_release_inner(entry, response_rx).await {
         log::error!("Handle release failed: {}", err);
     }
 }
@@ -121,11 +160,10 @@ async fn handle_release(
 /// Waits for the server to send a `Release` message on `response_rx` and then releases
 /// the cached shard.
 async fn handle_release_inner(
-    request_tx: impl Sink<Result<LockRequest, Status>, Error = mpsc::SendError>,
+    entry: CacheEntry,
     response_rx: impl Stream<Item = Result<LockResponse, Status>>,
-    data: Arc<Mutex<Option<ShardData>>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    futures::pin_mut!(request_tx);
+    futures::pin_mut!(entry);
     futures::pin_mut!(response_rx);
 
     let response = match response_rx.next().await {
@@ -135,13 +173,8 @@ async fn handle_release_inner(
     let shard_id = response.expect_release()?;
     log::warn!("shard {} stolen", shard_id);
 
-    let data = data.lock().unwrap().take().unwrap();
-    request_tx
-        .send(Ok(LockRequest {
-            body: Some(lock_request::Body::Released(data)),
-        }))
-        .await?;
     log::info!("sending released request for shard {}", shard_id);
+    entry.release().await?;
 
     if let Some(res) = response_rx.next().await {
         log::error!("unexpected message {:?}", res);
