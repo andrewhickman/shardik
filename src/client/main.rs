@@ -12,6 +12,8 @@ use shardik::resource::{FileSystem, Resource};
 
 #[derive(StructOpt)]
 struct Opts {
+    #[structopt(long, default_value = "http://[::1]:10000")]
+    endpoint: http::Uri,
     #[structopt(flatten)]
     fs: FileSystem,
     #[structopt(flatten)]
@@ -24,7 +26,7 @@ struct Opts {
     initial_key: String,
     /// The number of iterations to run for.
     #[structopt(long)]
-    iterations: u64,
+    iterations: Option<u64>,
     /// How long to lock keys for when accessing in milliseconds.
     #[structopt(long, default_value = "25")]
     access_duration: u64,
@@ -40,11 +42,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let resource = Arc::new(opts.fs);
     let metrics = Metrics::new(opts.metrics)?;
-    let client = client::LockServiceClient::connect("http://[::1]:10000")?;
+    let client = client::LockServiceClient::connect(opts.endpoint)?;
     let mut lock = Lock::new(opts.client_name, client, resource.clone(), metrics);
 
     let mut key = opts.initial_key;
-    for _ in 0..opts.iterations {
+    for i in 0.. {
+        if opts.iterations == Some(i) {
+            break;
+        }
+
         if lock.lock(&key).await? {
             log::info!("Lock acquired on key {}", key);
             resource

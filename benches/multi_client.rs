@@ -8,14 +8,16 @@ use futures::future;
 use tokio::net::process::Command as AsyncCommand;
 use tokio::runtime::Runtime;
 
-pub const SHARD_COUNT: u32 = 4;
-pub const CONCURRENT_CLIENTS: u32 = 4;
+pub const SHARD_COUNT: u32 = 32;
+pub const CONCURRENT_CLIENTS: u32 = 24;
 pub const ITERATIONS: u32 = 1024;
 
 pub fn multi_client_benchmark(c: &mut Criterion) {
     let mut server = Command::new(bin_path("server").unwrap())
         .arg("--shard-count")
         .arg(format!("{}", SHARD_COUNT))
+        .arg("--latency")
+        .arg("0")
         .spawn()
         .unwrap();
     // Wait for server to spin up
@@ -44,6 +46,8 @@ async fn run_client(id: u32) -> Result<(), Box<dyn std::error::Error>> {
         .arg(format!("{}/{}", id % SHARD_COUNT, id / SHARD_COUNT))
         .arg("--iterations")
         .arg(format!("{}", ITERATIONS))
+        .arg("--access-duration")
+        .arg("0")
         .status()
         .await?;
     if !status.success() {
@@ -63,5 +67,9 @@ fn bin_path(name: impl AsRef<Path>) -> io::Result<PathBuf> {
     Ok(result)
 }
 
-criterion_group!(benches, multi_client_benchmark);
+criterion_group!(
+    name = benches;
+    config = Criterion::default().sample_size(10);
+    targets = multi_client_benchmark
+);
 criterion_main!(benches);

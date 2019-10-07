@@ -43,6 +43,7 @@ rand_distr = "0.2.2"
 serde = { version = "1.0.101", features = ["derive"] }
 csv = "1.1.1"
 stats = { package = "streaming-stats", version = "0.2.2" }
+http = "0.1.18"
 
 [dev-dependencies]
 criterion = "0.3.0"

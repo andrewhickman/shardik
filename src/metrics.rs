@@ -46,7 +46,9 @@ impl Metrics {
             key: Cow::Borrowed(key),
             client_name: client_name.as_ref().map(Cow::from),
             nanos: dur.as_nanos(),
-        })
+        })?;
+        self.writer.flush()?;
+        Ok(())
     }
 }
 

@@ -2,6 +2,7 @@ mod connection;
 mod service;
 
 use std::io::Write;
+use std::net::SocketAddr;
 use std::thread;
 use std::time::Duration;
 
@@ -14,6 +15,8 @@ use shardik::resource::FileSystem;
 
 #[derive(StructOpt)]
 struct Opts {
+    #[structopt(long, default_value = "[::1]:10000")]
+    endpoint: SocketAddr,
     #[structopt(flatten)]
     fs: FileSystem,
     /// The simulated latency of the service in milliseconds.
@@ -36,14 +39,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
         .init();
 
-    let addr = "[::1]:10000".parse().unwrap();
-    log::info!("Listening on: {}", addr);
+    log::info!("Listening on: {}", opts.endpoint);
 
     let resource = opts.fs;
     let svc = server::LockServiceServer::new(LockService::new(
         &resource,
         Duration::from_millis(opts.latency),
     ));
-    Server::builder().serve(addr, svc).await?;
+    Server::builder().serve(opts.endpoint, svc).await?;
     Ok(())
 }
