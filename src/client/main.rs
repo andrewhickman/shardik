@@ -3,7 +3,9 @@ mod lock;
 use std::sync::Arc;
 use std::time::Duration;
 
+use futures::StreamExt;
 use structopt::StructOpt;
+use tokio::net::signal;
 
 use crate::lock::Lock;
 use shardik::api::*;
@@ -46,8 +48,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut lock = Lock::new(opts.client_name, client, resource.clone(), metrics);
 
     let mut key = opts.initial_key;
-    for i in 0.. {
+
+    let mut i = 0u64;
+    let ctrl_c = signal::ctrl_c()?;
+    futures::pin_mut!(ctrl_c);
+    loop {
         if opts.iterations == Some(i) {
+            log::info!("Completed {} iterations, exiting...", i);
+            break;
+        }
+        if futures::poll!(ctrl_c.next()).is_ready() {
+            log::info!("Received CTRL-C signal, exiting...");
             break;
         }
 
@@ -61,6 +72,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             log::info!("Failed to lock key {}", key);
         }
         key = resource.perturb_key(&key, opts.perturb_shard_chance);
+
+        if opts.iterations.is_some() {
+            i += 1;
+        }
     }
 
     lock.release_all().await;

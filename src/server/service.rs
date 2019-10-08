@@ -30,7 +30,7 @@ impl server::LockService for LockService {
         tokio::spawn(LockService::lock_handle_error(
             self.clone(),
             request_rx,
-            response_tx.clone(),
+            response_tx,
         ));
         Ok(Response::new(response_rx))
     }
@@ -50,6 +50,7 @@ impl LockService {
         mut response: mpsc::Sender<Result<LockResponse, Status>>,
     ) {
         if let Err(status) = self.lock_inner(request, response.clone()).await {
+            log::error!("Sending error response: {}", status);
             let _ = response.send(Err(status)).await;
         }
     }
@@ -64,7 +65,7 @@ impl LockService {
 
         let shard_id = match request.next().await {
             Some(req) => req?.expect_acquire()?,
-            None => return Err(Status::new(Code::InvalidArgument, "expected request")),
+            None => return Ok(()),
         };
         log::info!("Received acquire request for shard {}", shard_id);
         let (connection, data) = match self.connections.begin(&shard_id).await {
@@ -96,8 +97,13 @@ impl LockService {
         ));
 
         let data = match request.next().await {
-            Some(req) => req?.expect_released()?,
-            None => return Err(Status::new(Code::DataLoss, "shard not released")),
+            Some(Ok(req)) => req.expect_released()?,
+            _ => {
+                return Err(Status::new(
+                    Code::DataLoss,
+                    format!("shard {} not released", shard_id),
+                ));
+            }
         };
         log::info!("Received released request for shard {}", shard_id);
         connection.response_tx.send(data).unwrap();
