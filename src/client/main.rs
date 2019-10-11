@@ -2,9 +2,9 @@ mod lock;
 mod logger;
 mod ui;
 
+use std::io;
 use std::sync::Arc;
 use std::time::Duration;
-use std::io;
 
 use futures::StreamExt;
 use structopt::StructOpt;
@@ -18,6 +18,10 @@ use shardik::resource::{FileSystem, Resource};
 
 #[derive(StructOpt)]
 struct Opts {
+    #[structopt(long)]
+    /// Whether to show the fancy interface,
+    tui: bool,
+    /// The service endpoint to use.
     #[structopt(long, default_value = "http://[::1]:10000")]
     endpoint: http::Uri,
     #[structopt(flatten)]
@@ -44,7 +48,11 @@ struct Opts {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let opts = Opts::from_args();
-    logger::init();
+    if opts.tui {
+        logger::init();
+    } else {
+        env_logger::init();
+    }
 
     let screen = crossterm::AlternateScreen::to_alternate(true)?;
     let backend = tui::backend::CrosstermBackend::with_alternate_screen(io::stdout(), screen)?;
@@ -72,7 +80,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             break;
         }
 
-        ui.draw(&mut terminal, &lock)?;
+        if opts.tui {
+            ui.draw(&mut terminal, &lock)?;
+        }
 
         if lock.lock(&key).await? {
             log::info!("Lock acquired on key {}", key);

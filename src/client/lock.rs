@@ -133,6 +133,18 @@ impl<R: Resource> Lock<R> {
     }
 }
 
+impl<R> Lock<R> {
+    pub fn dump_shards<'a>(&'a self) -> impl Iterator<Item = &'a str> {
+        self.cache.iter().filter_map(|(shard_id, entry)| {
+            if entry.data.lock().unwrap().is_some() {
+                Some(shard_id.as_ref())
+            } else {
+                None
+            }
+        })
+    }
+}
+
 impl CacheEntry {
     async fn release(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let data = match self.data.lock().unwrap().take() {

@@ -1,10 +1,10 @@
 use std::iter;
 
 use crossbeam_queue::SegQueue;
-use log::Log;
 use env_logger::filter::{self, Filter};
 use env_logger::DEFAULT_FILTER_ENV;
 use lazy_static::lazy_static;
+use log::Log;
 
 lazy_static! {
     static ref LOGGER: Logger = Logger::new();
@@ -40,7 +40,8 @@ impl Log for Logger {
 
     fn log(&self, record: &log::Record) {
         if self.filter.matches(record) {
-            self.queue.push(format!("{}: {}", record.level(), record.args()));
+            self.queue
+                .push(format!("{}: {}", record.level(), record.args()));
         }
     }
 

@@ -15,6 +15,7 @@ use shardik::resource::FileSystem;
 
 #[derive(StructOpt)]
 struct Opts {
+    /// The endpoint to listen on.
     #[structopt(long, default_value = "[::1]:10000")]
     endpoint: SocketAddr,
     #[structopt(flatten)]
