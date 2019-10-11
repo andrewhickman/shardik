@@ -1,13 +1,17 @@
 mod lock;
+mod logger;
+mod ui;
 
 use std::sync::Arc;
 use std::time::Duration;
+use std::io;
 
 use futures::StreamExt;
 use structopt::StructOpt;
 use tokio::net::signal;
 
 use crate::lock::Lock;
+use crate::ui::Ui;
 use shardik::api::*;
 use shardik::metrics::{Metrics, MetricsOpts};
 use shardik::resource::{FileSystem, Resource};
@@ -40,7 +44,13 @@ struct Opts {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let opts = Opts::from_args();
-    env_logger::init();
+    logger::init();
+
+    let screen = crossterm::AlternateScreen::to_alternate(true)?;
+    let backend = tui::backend::CrosstermBackend::with_alternate_screen(io::stdout(), screen)?;
+    let mut terminal = tui::Terminal::new(backend)?;
+    terminal.hide_cursor()?;
+    let mut ui = Ui::new();
 
     let resource = Arc::new(opts.fs);
     let metrics = Metrics::new(opts.metrics)?;
@@ -61,6 +71,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             log::info!("Received CTRL-C signal, exiting...");
             break;
         }
+
+        ui.draw(&mut terminal, &lock)?;
 
         if lock.lock(&key).await? {
             log::info!("Lock acquired on key {}", key);

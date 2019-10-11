@@ -44,6 +44,19 @@ serde = { version = "1.0.101", features = ["derive"] }
 csv = "1.1.1"
 stats = { package = "streaming-stats", version = "0.2.2" }
 http = "0.1.18"
+crossbeam-queue = "0.1.2"
+lazy_static = "1.4.0"
+
+[dependencies.tui]
+git = "https://github.com/fdehau/tui-rs"
+rev = "e183d63a5ef4680d68def76fff06156c4e67e87e"
+default-features = false
+features = ["crossterm"]
+
+[dependencies.crossterm]
+version = "^0.10"
+default-features = false
+features = ["style", "screen"]
 
 [dev-dependencies]
 criterion = "0.3.0"
