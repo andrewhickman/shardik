@@ -8,9 +8,9 @@ use futures::future;
 use tokio::net::process::Command as AsyncCommand;
 use tokio::runtime::Runtime;
 
-pub const SHARD_COUNT: u32 = 32;
-pub const CONCURRENT_CLIENTS: u32 = 24;
-pub const ITERATIONS: u32 = 1024;
+pub const SHARD_COUNT: u32 = 8;
+pub const CONCURRENT_CLIENTS: u32 = 4;
+pub const ITERATIONS: u32 = 128;
 
 pub fn multi_client_benchmark(c: &mut Criterion) {
     let mut server = Command::new(bin_path("server").unwrap())
