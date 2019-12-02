@@ -33,7 +33,7 @@ struct Opts {
     #[structopt(long)]
     client_name: Option<String>,
     /// The initial key to lock.
-    #[structopt(long)]
+    #[structopt(long, default_value = "0/0")]
     initial_key: String,
     /// The number of iterations to run for.
     #[structopt(long)]
@@ -82,6 +82,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 break;
             }
 
+            log::info!("Trying to lock key {}", key);
             if opts.tui {
                 ui.draw(&mut terminal, &lock)?;
             }
@@ -91,7 +92,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 resource
                     .access(&key, Duration::from_millis(opts.access_duration))
                     .await?;
+                log::info!("Unlocking key {}", key);
+                if opts.tui {
+                    ui.draw(&mut terminal, &lock)?;
+                }
                 lock.unlock(&key).await?;
+                log::info!("Lock released on key {}", key);
             } else {
                 log::info!("Failed to lock key {}", key);
             }

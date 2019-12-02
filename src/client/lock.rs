@@ -46,7 +46,6 @@ impl<R: Resource> Lock<R> {
     }
 
     pub async fn lock(&mut self, key: &str) -> Result<bool, Box<dyn std::error::Error>> {
-        log::info!("Trying to lock key {}", key);
         let start = Instant::now();
         let result = self.set_locked(key, true).await;
         self.metrics.log(&self.client_name, key, start.elapsed())?;
@@ -54,7 +53,6 @@ impl<R: Resource> Lock<R> {
     }
 
     pub async fn unlock(&mut self, key: &str) -> Result<(), Box<dyn std::error::Error>> {
-        log::info!("Unlocking key {}", key);
         assert!(self.set_locked(key, false).await?);
         Ok(())
     }
