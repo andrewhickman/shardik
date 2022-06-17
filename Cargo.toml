@@ -44,7 +44,7 @@ serde = { version = "1.0.101", features = ["derive"] }
 csv = "1.1.1"
 stats = { package = "streaming-stats", version = "0.2.2" }
 http = "0.1.18"
-crossbeam-queue = "0.1.2"
+crossbeam-queue = "0.2.3"
 lazy_static = "1.4.0"
 
 [dependencies.tui]
