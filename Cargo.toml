@@ -29,7 +29,7 @@ harness = false
 
 [dependencies]
 tonic = "0.1.0-alpha.1"
-tokio = { version = "=0.2.0-alpha.6", features = ["process", "signal"] }
+tokio = { version = "=1.18.5", features = ["process", "signal"] }
 log = "0.4"
 futures-preview = { version = "0.3.0-alpha.19", features = ["async-await"] }
 prost = "0.5"
